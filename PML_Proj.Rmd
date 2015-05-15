@@ -1,0 +1,147 @@
+---
+title: "Machine Learning Project (Coursera)"
+author: "Israel Yahalom"
+date: "Monday, May 11, 2015"
+output: html_document
+---
+
+# SYNOPSYS  
+This document describes Coursera assignment in the field of ***Machine Learning Process (MLP)***. Basically the MLP is a 2 stage process: in the first stage the machine (computer) utilizes some algorithms to analyze a given dataset and learn its characteristics. Following a successful learning process, the machine is capable to produce good (enough) predictions that are tested on another but similar dataset.  
+
+The data used in this assignment was recorded by several devices (such as Jawbone Up, Nike FuelBand, and/or Fitbit) different types of human physical activities. The 2 datasets, for learning and for predicting, were sourced from http://groupware.les.inf.puc-rio.br/har.  
+
+The goal of the assignment is to apply the MLP on 1st dataset and then based on the 2nd dataset to predict the correct type of activity (one of five specific activities).
+
+#THE DATA
+##Loading the Data
+We start with setting the working directory, cleaning the memory and loading the datasets, one for learning (training) and one for predicting (testing) .
+```{r}
+setwd("F:/Data Science Specialization/8 Practical Machine Learning/Project")
+rm(list = ls(all = TRUE))
+dtrain<- read.csv("pml-training.csv", na.strings=c('NA','','#DIV/0!'))
+dtest<- read.csv("pml-testing.csv", na.strings=c('NA','','#DIV/0!'))
+```
+##
+##Data Observation 
+```{r}
+dim(dtrain); dim(dtest)
+```
+We observed that each data set has `r dim(dtrain)[2]` variables, that the training data set has `r dim(dtrain)[1]` observations (records) and that the training data set has `r dim(dtest)[1]` observations.  
+Then we explored the distribution of activity types (A to E) in the training dataset.
+```{r}
+barplot(summary(dtrain$classe), main="Distribution of Activity Types (Training Dataset)", xlab="Activity Type", ylab="Number of Records")
+```
+
+##Creating Validation Data Set
+
+Using the 'caret' package (with a small fix function to the package), the training data set was divided into two subsets: ttrain=75% of total observations and tvald set = 25% of the observations
+```{r}
+library(caret)
+#fix for caret package
+class2ind <- function(cl)
+{
+      n <- length(cl)
+      cl <- as.factor(cl)
+      x <- matrix(0, n, length(levels(cl)) )
+      x[(1:n) + n*(unclass(cl)-1)] <- 1
+      dimnames(x) <- list(names(cl), levels(cl))
+      x
+}
+set.seed(1111)
+inTrain<- createDataPartition(y=dtrain$classe, p=0.75, list=FALSE)
+ttrain<- dtrain[inTrain,]
+tvalid<- dtrain[-inTrain,]
+dim(ttrain); dim(tvalid)
+```
+##Prepare For Learning
+The aim of this stage is to reduce the number of variables (160 columns) to shorten the time of the learning session.  
+The first 7 columns are indices and are not related to any physical activity, so we started with removing them in all 3 datasets.
+```{r}
+ttrain<- ttrain[,-c(1:7)]
+tvalid<- tvalid[,-c(1:7)]
+dtest<-dtest[,-c(1:7)]
+```
+
+Now we analyzed the training dataset and searched variables (columns) that contain large quantity of missing values (NAs).
+```{r}
+high_na<- sapply(ttrain, function(x) {sum(is.na(x))})
+table(high_na)
+```
+
+It is clear that 53 variables (columns) has no missing value but the other 100 variables contain large quantity of NA values. We decided to remove every variable that contains more than 95% NA observations
+```{r}
+na_var<- names(high_na[high_na>=95/100*dim(ttrain)[1]])
+```
+We applied this reducing variables strategy to all 3 datasets.
+```{r}
+ttrain<- ttrain[, !names(ttrain) %in% na_var]
+tvalid<- tvalid[, !names(tvalid) %in% na_var]
+dtest<- dtest[, !names(dtest) %in% na_var]
+```
+This strategy produced datasets with only 53 variables, 52 predictors and 1 result variable 
+```{r}
+dim (ttrain); dim(tvalid); dim(dtest)
+```
+
+#LEARNING
+ 
+```{r echo = FALSE}
+set.seed(2222)
+```
+##Training
+We used the "ttrain" data set, the "Random Forests" method (rf) and the "train"" function in "caret" to consilidate the model.
+```{r eval = FALSE}
+Model<- train(classe~., data=ttrain, method="rf", tuneGrid = data.frame(mtry = 3))
+saveRDS(Model, "Model.RDS")
+Model
+```
+
+```{r echo = FALSE}
+Model<- readRDS("Model.RDS")
+Model
+```
+##Validating
+Initially we tested the prediction quality of the model on the training data set, and displayed the results by the "confusionMatrix" function of "caret" package.
+```{r}
+prediction <- predict(Model, ttrain)
+confusionMatrix(prediction, ttrain$classe)
+```
+
+Then we tested the prediction quality of the model on the validation data set, and displayed the results by the "confusionMatrix" function of "caret" package.
+
+```{r}
+prediction <- predict(Model, tvalid)
+confusionMatrix(prediction, tvalid$classe)
+```
+
+##Conclusions  
+1.The prediction accuracy of the model on the training data set equals 99.91%.  
+2.The prediction accuracy of the model on the validation data set equals 99.82%.
+
+We established a model to predict activity type (exercise) based on data collected by several wearable devices. We estimate that the ***out of sample error*** equals 0.18% (100% - testing accuracy).
+
+#PREDICTION
+We used the model to predict the type of activities in the "dtest" data set and submit the results to Coursera.
+```{r}
+testPredictions <- predict(Model, dtest)
+#submiting results
+answers<- testPredictions
+
+pml_write_files<- function(x){
+      n<- length(x)
+      for(i in 1:n){
+            filename<- paste0("problem_id_",i,".txt")
+            write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+      }
+}
+
+pml_write_files(answers)
+```
+
+
+
+
+
+
+
+
